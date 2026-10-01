@@ -1,22 +1,35 @@
 import { onUnmounted, reactive } from 'vue'
 import type { StoreApi } from 'zustand/vanilla'
 import Dexie, { type Table } from 'dexie'
-import type { CollectPoint, FungusRecord, IdentifyLog, SporePrint } from '@/types'
+import type {
+  CollectPoint,
+  FungusRecord,
+  IdentifyLog,
+  NomenList,
+  ReconcileItem,
+  ReconcileRun,
+  ReceiptBatch,
+  SporePrint
+} from '@/types'
 
 /** IndexedDB 数据结构版本号 */
-export const SCHEMA_VERSION = 2
+export const SCHEMA_VERSION = 3
 
 export interface MetaRow {
   key: string
   value: number
 }
 
-/** Dexie 封装：条目 / 孢子印 / 采集点 / 鉴定结论 四张表 + 元数据表 */
+/** Dexie 封装：条目 / 孢子印 / 采集点 / 鉴定结论 + 称谓对账四张表 + 元数据表 */
 class FungiGuideDb extends Dexie {
   records!: Table<FungusRecord, string>
   spores!: Table<SporePrint, string>
   points!: Table<CollectPoint, string>
   identifies!: Table<IdentifyLog, string>
+  nomenLists!: Table<NomenList, string>
+  reconcileRuns!: Table<ReconcileRun, string>
+  reconcileItems!: Table<ReconcileItem, string>
+  receipts!: Table<ReceiptBatch, string>
   meta!: Table<MetaRow, string>
 
   constructor() {
@@ -29,7 +42,7 @@ class FungiGuideDb extends Dexie {
       meta: 'key'
     })
     // v2：新增「菌肉变色反应」字段，迁移时为历史条目补齐默认值（不变色）
-    this.version(SCHEMA_VERSION)
+    this.version(2)
       .stores({
         records: 'id, code, pointId, attachment, capShape',
         spores: 'id, recordId, color, observeDate',
@@ -44,6 +57,24 @@ class FungiGuideDb extends Dexie {
           .modify((record) => {
             if (!record.fleshReaction) {
               record.fleshReaction = '不变色'
+            }
+          })
+      })
+    // v3：新增称谓对账四张表；历史鉴定结论没有称谓版本，迁移时补空串（未标注）
+    this.version(SCHEMA_VERSION)
+      .stores({
+        nomenLists: 'id, version, importedAt',
+        reconcileRuns: 'id, status, createdAt',
+        reconcileItems: 'id, runId, identifyId, recordId, status, receiptId',
+        receipts: 'id, status, createdAt'
+      })
+      .upgrade(async (tx) => {
+        await tx
+          .table<IdentifyLog, string>('identifies')
+          .toCollection()
+          .modify((log) => {
+            if (log.nomenVersion === undefined) {
+              log.nomenVersion = ''
             }
           })
       })
@@ -232,7 +263,8 @@ export async function seedDemoData(): Promise<void> {
       confidence: '低',
       needReview: true,
       reviewer: '祁野',
-      date: today
+      date: today,
+      nomenVersion: ''
     },
     {
       id: 'idf_002',
@@ -244,7 +276,8 @@ export async function seedDemoData(): Promise<void> {
       confidence: '中',
       needReview: false,
       reviewer: '祁野',
-      date: today
+      date: today,
+      nomenVersion: ''
     }
   ])
 }

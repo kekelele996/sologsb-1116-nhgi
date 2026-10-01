@@ -21,6 +21,7 @@ import { recordStore } from '@/stores/recordStore'
 import { sporeStore } from '@/stores/sporeStore'
 import { identifyStore } from '@/stores/identifyStore'
 import { pointStore } from '@/stores/pointStore'
+import { nomenStore } from '@/stores/nomenStore'
 import { uid } from '@/utils/id'
 
 const recordState = useStore(recordStore)
@@ -96,7 +97,9 @@ async function saveLog(): Promise<void> {
     confidence: logForm.confidence,
     needReview: logForm.needReview,
     reviewer: logForm.reviewer.trim(),
-    date: new Date().toISOString().slice(0, 10)
+    date: new Date().toISOString().slice(0, 10),
+    // 落结论时打上当前称谓版本，中心改版后据此重新确认
+    nomenVersion: nomenStore.getState().currentVersion()
   }
   await identifyStore.getState().save(log)
   ElMessage.success(`${active.value.code} 已记录结论：${log.conclusion}（${log.confidence}）`)

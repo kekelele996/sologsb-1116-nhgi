@@ -21,4 +21,6 @@ export interface IdentifyLog {
   needReview: boolean
   reviewer: string
   date: string
+  /** 结论对齐的称谓版本（空串 = 未标注，待与中心称谓表对账） */
+  nomenVersion: string
 }

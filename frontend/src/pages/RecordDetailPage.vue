@@ -13,6 +13,7 @@ import { recordStore } from '@/stores/recordStore'
 import { sporeStore } from '@/stores/sporeStore'
 import { pointStore } from '@/stores/pointStore'
 import { identifyStore } from '@/stores/identifyStore'
+import { nomenStore } from '@/stores/nomenStore'
 import { sporeColorHex } from '@/utils/spore'
 import { uid } from '@/utils/id'
 
@@ -22,10 +23,16 @@ const recordState = useStore(recordStore)
 const sporeState = useStore(sporeStore)
 const pointState = useStore(pointStore)
 const identifyState = useStore(identifyStore)
+const nomenState = useStore(nomenStore)
 
 const record = computed(() => recordState.records.find((item) => item.id === route.params.id) ?? null)
 const spore = computed(() => sporeState.spores.find((item) => item.recordId === record.value?.id) ?? null)
 const logs = computed(() => identifyState.logs.filter((item) => item.recordId === record.value?.id))
+/** 该条目还在等鉴定人认过的对账条目 */
+const pendingItems = computed(() =>
+  nomenState.items.filter((item) => item.recordId === record.value?.id && item.status === 'pending')
+)
+const pendingIdentifyIds = computed(() => new Set(pendingItems.value.map((item) => item.identifyId)))
 /** 当前条目所属采集点名称（在脚本内取，避免模板内箭头函数丢失空值收窄） */
 const recordPointName = computed(() => {
   const current = record.value
@@ -129,6 +136,19 @@ async function removeSpore(): Promise<void> {
     </div>
 
     <template v-if="record">
+      <el-alert
+        v-if="pendingItems.length > 0"
+        type="warning"
+        show-icon
+        :closable="false"
+        class="pending-alert"
+      >
+        <template #title>
+          中心称谓表已改版，该条目有 {{ pendingItems.length }} 条鉴定结论待认（{{ pendingItems[0].toVersion }} 版）
+          <el-button link type="primary" @click="router.push('/nomen')">去称谓对账逐条认过</el-button>
+        </template>
+      </el-alert>
+
       <el-card shadow="never" class="block">
         <template #header>
           <div class="block-head">
@@ -203,6 +223,12 @@ async function removeSpore(): Promise<void> {
             </template>
           </el-table-column>
           <el-table-column prop="confidence" label="置信度" width="90" />
+          <el-table-column label="称谓版本" width="110">
+            <template #default="{ row }: { row: { id: string; nomenVersion: string } }">
+              <el-tag v-if="pendingIdentifyIds.has(row.id)" type="warning" size="small" effect="dark">待认</el-tag>
+              <span v-else class="muted">{{ row.nomenVersion || '未标注' }}</span>
+            </template>
+          </el-table-column>
           <el-table-column label="复核" width="110">
             <template #default="{ row }: { row: { needReview: boolean; reviewer: string } }">
               <el-tag v-if="row.needReview" type="warning" size="small" effect="dark">待复核</el-tag>
@@ -238,6 +264,10 @@ async function removeSpore(): Promise<void> {
   background: #f7f5f0;
   font-size: 12px;
   color: #6f7d72;
+}
+.pending-alert {
+  border-radius: 12px;
+  margin-bottom: 16px;
 }
 .spore-body {
   display: flex;

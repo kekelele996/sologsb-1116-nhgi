@@ -23,6 +23,7 @@ import { recordStore } from '@/stores/recordStore'
 import { sporeStore } from '@/stores/sporeStore'
 import { pointStore } from '@/stores/pointStore'
 import { identifyStore } from '@/stores/identifyStore'
+import { nomenStore } from '@/stores/nomenStore'
 import { uid } from '@/utils/id'
 
 const router = useRouter()
@@ -30,6 +31,7 @@ const recordState = useStore(recordStore)
 const sporeState = useStore(sporeStore)
 const pointState = useStore(pointStore)
 const identifyState = useStore(identifyStore)
+const nomenState = useStore(nomenStore)
 
 const filterAttachment = ref<GillAttachment | ''>('')
 const filterColor = ref<SporeColor | ''>('')
@@ -81,6 +83,16 @@ function identifyOf(recordId: string): { conclusion: string; confidence: string;
   const log = identifyState.logs.find((item) => item.recordId === recordId)
   return log ? { conclusion: log.conclusion, confidence: log.confidence, needReview: log.needReview } : null
 }
+
+/** 各条目待认的对账条目数（中心改版后等鉴定人逐条认过） */
+const pendingByRecord = computed(() => {
+  const map = new Map<string, number>()
+  for (const item of nomenState.items) {
+    if (item.status !== 'pending') continue
+    map.set(item.recordId, (map.get(item.recordId) ?? 0) + 1)
+  }
+  return map
+})
 
 function toggleCompare(id: string): void {
   compareIds.value = compareIds.value.includes(id)
@@ -189,6 +201,7 @@ async function removeRecord(record: FungusRecord): Promise<void> {
   await sporeStore.getState().removeByRecord(record.id)
   const logs = identifyState.logs.filter((item) => item.recordId === record.id)
   await Promise.all(logs.map((item) => identifyStore.getState().remove(item.id)))
+  await nomenStore.getState().removePendingByRecord(record.id)
   await recordStore.getState().remove(record.id)
   ElMessage.success('条目已删除')
 }
@@ -261,6 +274,16 @@ async function removeRecord(record: FungusRecord): Promise<void> {
             </span>
           </template>
           <el-tag v-else type="warning" size="small" effect="plain">尚无鉴定结论</el-tag>
+          <el-tag
+            v-if="pendingByRecord.get(item.record.id)"
+            type="warning"
+            size="small"
+            effect="dark"
+            class="pending-tag"
+            @click="router.push('/nomen')"
+          >
+            称谓待认 ×{{ pendingByRecord.get(item.record.id) }}
+          </el-tag>
           <el-tag v-if="item.percent > 0" size="small" effect="plain">匹配度 {{ item.percent }}%</el-tag>
         </div>
         <div class="card-actions">
@@ -463,6 +486,9 @@ async function removeRecord(record: FungusRecord): Promise<void> {
   align-items: center;
   gap: 8px;
   margin-bottom: 10px;
+}
+.pending-tag {
+  cursor: pointer;
 }
 .card-actions {
   display: flex;
