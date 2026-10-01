@@ -21,4 +21,6 @@ export interface IdentifyLog {
   needReview: boolean
   reviewer: string
   date: string
+  /** 称谓版本：该结论按哪版称谓表落定；旧数据无版本，升级时补 'legacy' */
+  nomenclatureVersion: string
 }

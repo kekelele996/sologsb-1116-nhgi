@@ -96,7 +96,8 @@ async function saveLog(): Promise<void> {
     confidence: logForm.confidence,
     needReview: logForm.needReview,
     reviewer: logForm.reviewer.trim(),
-    date: new Date().toISOString().slice(0, 10)
+    date: new Date().toISOString().slice(0, 10),
+    nomenclatureVersion: 'legacy'
   }
   await identifyStore.getState().save(log)
   ElMessage.success(`${active.value.code} 已记录结论：${log.conclusion}（${log.confidence}）`)

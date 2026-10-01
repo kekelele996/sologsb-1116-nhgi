@@ -1,22 +1,38 @@
 import { onUnmounted, reactive } from 'vue'
 import type { StoreApi } from 'zustand/vanilla'
 import Dexie, { type Table } from 'dexie'
-import type { CollectPoint, FungusRecord, IdentifyLog, SporePrint } from '@/types'
+import type {
+  CollectPoint,
+  FungusRecord,
+  IdentifyLog,
+  MergeItem,
+  NameMerge,
+  NomenclatureVersion,
+  Receipt,
+  ReconcileJob,
+  SporePrint
+} from '@/types'
+import { LEGACY_NOMENCLATURE_VERSION } from '@/types'
 
 /** IndexedDB 数据结构版本号 */
-export const SCHEMA_VERSION = 2
+export const SCHEMA_VERSION = 3
 
 export interface MetaRow {
   key: string
   value: number
 }
 
-/** Dexie 封装：条目 / 孢子印 / 采集点 / 鉴定结论 四张表 + 元数据表 */
+/** Dexie 封装：条目 / 孢子印 / 采集点 / 鉴定结论 + 称谓对账五张表 + 元数据表 */
 class FungiGuideDb extends Dexie {
   records!: Table<FungusRecord, string>
   spores!: Table<SporePrint, string>
   points!: Table<CollectPoint, string>
   identifies!: Table<IdentifyLog, string>
+  versions!: Table<NomenclatureVersion, string>
+  merges!: Table<NameMerge, string>
+  mergeItems!: Table<MergeItem, string>
+  receipts!: Table<Receipt, string>
+  reconcileJobs!: Table<ReconcileJob, string>
   meta!: Table<MetaRow, string>
 
   constructor() {
@@ -29,7 +45,7 @@ class FungiGuideDb extends Dexie {
       meta: 'key'
     })
     // v2：新增「菌肉变色反应」字段，迁移时为历史条目补齐默认值（不变色）
-    this.version(SCHEMA_VERSION)
+    this.version(2)
       .stores({
         records: 'id, code, pointId, attachment, capShape',
         spores: 'id, recordId, color, observeDate',
@@ -44,6 +60,30 @@ class FungiGuideDb extends Dexie {
           .modify((record) => {
             if (!record.fleshReaction) {
               record.fleshReaction = '不变色'
+            }
+          })
+      })
+    // v3：称谓对账。新增五张表；为历史鉴定结论补齐称谓版本（旧数据无版本，记 legacy）
+    this.version(SCHEMA_VERSION)
+      .stores({
+        records: 'id, code, pointId, attachment, capShape',
+        spores: 'id, recordId, color, observeDate',
+        points: 'id, name, substrate, vegetation',
+        identifies: 'id, recordId, conclusion, date, nomenclatureVersion',
+        versions: 'id, version',
+        merges: 'id, versionId, oldName, acceptedName',
+        mergeItems: 'id, mergeId, versionId, identifyLogId, recordId, status',
+        receipts: 'id, versionId, status',
+        reconcileJobs: 'id, versionId, status',
+        meta: 'key'
+      })
+      .upgrade(async (tx) => {
+        await tx
+          .table<IdentifyLog, string>('identifies')
+          .toCollection()
+          .modify((log) => {
+            if (!log.nomenclatureVersion) {
+              log.nomenclatureVersion = LEGACY_NOMENCLATURE_VERSION
             }
           })
       })
@@ -232,7 +272,8 @@ export async function seedDemoData(): Promise<void> {
       confidence: '低',
       needReview: true,
       reviewer: '祁野',
-      date: today
+      date: today,
+      nomenclatureVersion: LEGACY_NOMENCLATURE_VERSION
     },
     {
       id: 'idf_002',
@@ -244,7 +285,8 @@ export async function seedDemoData(): Promise<void> {
       confidence: '中',
       needReview: false,
       reviewer: '祁野',
-      date: today
+      date: today,
+      nomenclatureVersion: LEGACY_NOMENCLATURE_VERSION
     }
   ])
 }

@@ -13,6 +13,7 @@ import { recordStore } from '@/stores/recordStore'
 import { sporeStore } from '@/stores/sporeStore'
 import { pointStore } from '@/stores/pointStore'
 import { identifyStore } from '@/stores/identifyStore'
+import { nomenclatureStore } from '@/stores/nomenclatureStore'
 import { sporeColorHex } from '@/utils/spore'
 import { uid } from '@/utils/id'
 
@@ -22,10 +23,23 @@ const recordState = useStore(recordStore)
 const sporeState = useStore(sporeStore)
 const pointState = useStore(pointStore)
 const identifyState = useStore(identifyStore)
+const nomenclatureState = useStore(nomenclatureStore)
 
 const record = computed(() => recordState.records.find((item) => item.id === route.params.id) ?? null)
 const spore = computed(() => sporeState.spores.find((item) => item.recordId === record.value?.id) ?? null)
 const logs = computed(() => identifyState.logs.filter((item) => item.recordId === record.value?.id))
+
+/** 某条鉴定结论对应的称谓对账条目（取最新一条） */
+function itemOfLog(logId: string) {
+  return nomenclatureState.mergeItems
+    .filter((item) => item.identifyLogId === logId)
+    .sort((a, b) => (b.confirmedAt ?? '').localeCompare(a.confirmedAt ?? ''))[0]
+}
+
+/** 某条目下待认的对账条目数（详情页角标） */
+const pendingCount = computed(
+  () => nomenclatureState.mergeItems.filter((item) => item.recordId === record.value?.id && item.status === 'pending').length
+)
 /** 当前条目所属采集点名称（在脚本内取，避免模板内箭头函数丢失空值收窄） */
 const recordPointName = computed(() => {
   const current = record.value
@@ -111,7 +125,12 @@ async function removeSpore(): Promise<void> {
   <div class="page">
     <div class="page-head">
       <div v-if="record">
-        <h2 class="page-title">{{ record.tempName || '未命名条目' }}</h2>
+        <h2 class="page-title">
+          {{ record.tempName || '未命名条目' }}
+          <el-tag v-if="pendingCount > 0" type="danger" size="small" effect="dark" class="pending-tag">
+            等认 {{ pendingCount }}
+          </el-tag>
+        </h2>
         <p class="page-sub">
           <span class="mono">{{ record.code }}</span> · 采集点
           {{ recordPointName }} · 采集日期
@@ -209,6 +228,19 @@ async function removeSpore(): Promise<void> {
               <span v-else class="muted">{{ row.reviewer || '已复核' }}</span>
             </template>
           </el-table-column>
+          <el-table-column label="称谓对账" min-width="140">
+            <template #default="{ row }: { row: { id: string } }">
+              <template v-if="itemOfLog(row.id)">
+                <el-tag v-if="itemOfLog(row.id)?.status === 'pending'" type="danger" size="small" effect="dark">等认</el-tag>
+                <el-tag v-else-if="itemOfLog(row.id)?.status === 'confirmed'" type="success" size="small" effect="plain">已认</el-tag>
+                <el-tag v-else-if="itemOfLog(row.id)?.status === 'rejected'" type="warning" size="small" effect="plain">被拒收</el-tag>
+                <el-tooltip v-if="itemOfLog(row.id)?.rejectReason" :content="itemOfLog(row.id)?.rejectReason" placement="top">
+                  <span class="reject-reason">{{ itemOfLog(row.id)?.rejectReason }}</span>
+                </el-tooltip>
+              </template>
+              <span v-else class="muted">—</span>
+            </template>
+          </el-table-column>
         </el-table>
         <el-empty v-if="logs.length === 0" description="尚无鉴定结论，去「鉴定工作页」生成" />
       </el-card>
@@ -275,5 +307,14 @@ async function removeSpore(): Promise<void> {
   display: flex;
   gap: 8px;
   padding-left: 92px;
+}
+.pending-tag {
+  margin-left: 8px;
+  vertical-align: middle;
+}
+.reject-reason {
+  margin-left: 6px;
+  color: #8a5a1f;
+  font-size: 12px;
 }
 </style>

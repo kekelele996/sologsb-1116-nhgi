@@ -23,6 +23,7 @@ import { recordStore } from '@/stores/recordStore'
 import { sporeStore } from '@/stores/sporeStore'
 import { pointStore } from '@/stores/pointStore'
 import { identifyStore } from '@/stores/identifyStore'
+import { nomenclatureStore } from '@/stores/nomenclatureStore'
 import { uid } from '@/utils/id'
 
 const router = useRouter()
@@ -30,6 +31,7 @@ const recordState = useStore(recordStore)
 const sporeState = useStore(sporeStore)
 const pointState = useStore(pointStore)
 const identifyState = useStore(identifyStore)
+const nomenclatureState = useStore(nomenclatureStore)
 
 const filterAttachment = ref<GillAttachment | ''>('')
 const filterColor = ref<SporeColor | ''>('')
@@ -80,6 +82,11 @@ function pointName(pointId: string): string {
 function identifyOf(recordId: string): { conclusion: string; confidence: string; needReview: boolean } | null {
   const log = identifyState.logs.find((item) => item.recordId === recordId)
   return log ? { conclusion: log.conclusion, confidence: log.confidence, needReview: log.needReview } : null
+}
+
+/** 某条目下待认的称谓对账条目数（图谱角标） */
+function pendingCountOf(recordId: string): number {
+  return nomenclatureState.mergeItems.filter((item) => item.recordId === recordId && item.status === 'pending').length
 }
 
 function toggleCompare(id: string): void {
@@ -262,6 +269,15 @@ async function removeRecord(record: FungusRecord): Promise<void> {
           </template>
           <el-tag v-else type="warning" size="small" effect="plain">尚无鉴定结论</el-tag>
           <el-tag v-if="item.percent > 0" size="small" effect="plain">匹配度 {{ item.percent }}%</el-tag>
+          <el-tag
+            v-if="pendingCountOf(item.record.id) > 0"
+            type="danger"
+            size="small"
+            effect="dark"
+            class="pending-tag"
+          >
+            等认 {{ pendingCountOf(item.record.id) }}
+          </el-tag>
         </div>
         <div class="card-actions">
           <el-button size="small" @click="router.push(`/atlas/${item.record.id}`)">详情</el-button>
@@ -467,5 +483,8 @@ async function removeRecord(record: FungusRecord): Promise<void> {
 .card-actions {
   display: flex;
   gap: 8px;
+}
+.pending-tag {
+  margin-left: auto;
 }
 </style>
